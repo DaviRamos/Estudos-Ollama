@@ -1,0 +1,228 @@
+﻿@page "/"
+@using Azure
+@using Azure.AI.Inference
+@using Microsoft.Extensions.AI
+@attribute [StreamRendering]
+@rendermode InteractiveServer
+
+<PageTitle>🦙 .NET and local reasoning models 💯</PageTitle>
+
+<div class="net-brand-page">
+    <h1 class="net-brand-title">🦙 .NET and local reasoning models 💯</h1>
+
+    @if (showNotification)
+    {
+        <div class="alert alert-success" role="alert">
+            @notificationMessage
+            <br />
+            <small>@elapsedTimeMessage</small>
+        </div>
+    }
+
+    <table class="table table-bordered table-striped">
+        <thead class="thead-dark">
+            <tr>
+                <th style="width: 30%;">
+                    <div style="display: flex; justify-self; align-items: flex-end;">
+                        <button class="btn btn-sm btn-primary" @onclick="StartModelTest1">Start</button>
+                        <span style="margin-left: 10px;">Model: @testModel1Name</span>
+                    </div>
+                </th>
+                <th style="width: 35%;">
+                    <div style="display: flex; justify-self; align-items: flex-end;">
+                        <button class="btn btn-sm btn-primary" @onclick="StartModelTest2">Start</button>
+                        <span style="margin-left: 10px;">Model: @testModel2Name</span>
+                    </div>
+                </th>
+                <th style="width: 35%;">
+                    <div style="display: flex; justify-self; align-items: flex-end;">
+                        <button class="btn btn-sm btn-primary" @onclick="StartModelTest3">Start</button>
+                        <span style="margin-left: 10px;">Model: @testModel3Name</span>
+                    </div>
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="3">Problem: @promptMathSimple</td>
+            </tr>
+            <tr>
+                <td><small>@testModel1SimpleProblemResponse</small></td>
+                <td><small>@testModel2SimpleProblemResponse</small></td>
+                <td><small>@testModel3SimpleProblemResponse</small></td>
+            </tr>
+            <tr>
+                <td colspan="3">Problem: @promptMathComplex</td>
+            </tr>
+            <tr>
+                <td><small>@testModel1ComplexProblemResponse</small></td>
+                <td><small>@testModel2ComplexProblemResponse</small></td>
+                <td><small>@testModel3ComplexProblemResponse</small></td>
+            </tr>
+            <tr>
+                <td colspan="3">Problem: @promptMathComplexDetailed</td>
+            </tr>
+            <tr>
+                <td><small>@testModel1ComplexDetailedProblemResponse</small></td>
+                <td><small>@testModel2ComplexDetailedProblemResponse</small></td>
+                <td><small>@testModel3ComplexDetailedProblemResponse</small></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private const string testModel1Name = "phi3.5";
+    private string testModel1SimpleProblemResponse = "";
+    private string testModel1ComplexProblemResponse = "";
+    private string testModel1ComplexDetailedProblemResponse = "";
+    private const string testModel2Name = "deepseek-r1";
+    private string testModel2SimpleProblemResponse = "";
+    private string testModel2ComplexProblemResponse = "";
+    private string testModel2ComplexDetailedProblemResponse = "";
+    private const string testModel3Name = "qwq";
+    private string testModel3SimpleProblemResponse = "";
+    private string testModel3ComplexProblemResponse = "";
+    private string testModel3ComplexDetailedProblemResponse = "";
+    private OllamaChatClient chat = null;
+    private string promptMathSimple = "Please solve 2 + 3";
+    private string promptMathComplex = "Which is bigger, 9.9 or 9.11?";
+    private string promptMathComplexDetailed = "Which number is bigger, [9.9] or [9.11]?";
+    private bool showNotification = false;
+    private string notificationMessage = "";
+    private string elapsedTimeMessage = "";
+    private bool isProcessing = false;
+    private DateTime startTime;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+
+    async Task StartModelTest1()
+    {
+        await StartModel(testModel1Name);
+    }
+
+    async Task StartModelTest2()
+    {
+        await StartModel(testModel2Name);
+    }
+
+    async Task StartModelTest3()
+    {
+        await StartModel(testModel3Name);
+    }
+
+    async Task StartModel(string modelId)
+    {
+        isProcessing = true;
+        startTime = DateTime.Now;
+        _ = UpdateNotificationTime();
+        ShowNotification($"Solving [{promptMathSimple}] with [{modelId}]...");
+        await ProcessPromptAsync(modelId, promptMathSimple, response => UpdateResponse(modelId, response, "simple"));
+        ShowNotification($"Solving [{promptMathComplex}] with [{modelId}]...");
+        await ProcessPromptAsync(modelId, promptMathComplex, response => UpdateResponse(modelId, response, "complex"));
+        ShowNotification($"Solving [{promptMathComplexDetailed}] with [{modelId}]...");
+        await ProcessPromptAsync(modelId, promptMathComplexDetailed, response => UpdateResponse(modelId, response, "complexDetailed"));
+        ShowNotification("Processing completed!");
+        isProcessing = false;
+        await Task.Delay(3000);
+        if (!isProcessing)
+        {
+            showNotification = false;
+            StateHasChanged();
+        }
+    }
+
+    async Task ProcessPromptAsync(string modelId, string prompt, Action<string> updateResponse)
+    {
+        IChatClient chat = null;
+        chat = new OllamaChatClient(new Uri("http://localhost:11434/"), modelId);
+        var result = chat.CompleteStreamingAsync(prompt);
+        var live_response = string.Empty;
+        await foreach (var message in result)
+        {
+            live_response += message.Text;
+            updateResponse(live_response);
+            StateHasChanged();
+        }
+        StateHasChanged();
+    }
+
+    private void UpdateResponse(string modelId, string response, string problemType)
+    {
+        switch (modelId)
+        {
+            case testModel1Name:
+                if (problemType == "simple") testModel1SimpleProblemResponse = response;
+                else if (problemType == "complex") testModel1ComplexProblemResponse = response;
+                else if (problemType == "complexDetailed") testModel1ComplexDetailedProblemResponse = response;
+                break;
+            case testModel2Name:
+                if (problemType == "simple") testModel2SimpleProblemResponse = response;
+                else if (problemType == "complex") testModel2ComplexProblemResponse = response;
+                else if (problemType == "complexDetailed") testModel2ComplexDetailedProblemResponse = response;
+                break;
+            case testModel3Name:
+                if (problemType == "simple") testModel3SimpleProblemResponse = response;
+                else if (problemType == "complex") testModel3ComplexProblemResponse = response;
+                else if (problemType == "complexDetailed") testModel3ComplexDetailedProblemResponse = response;
+                break;
+        }
+    }
+
+    private void ShowNotification(string message)
+    {
+        notificationMessage = message;
+        showNotification = true;
+        StateHasChanged();
+    }
+
+    private async Task UpdateNotificationTime()
+    {
+        while (isProcessing)
+        {
+            var elapsedTime = DateTime.Now - startTime;
+            elapsedTimeMessage = $"Elapsed time: {elapsedTime.Hours:D2}:{elapsedTime.Minutes:D2}:{elapsedTime.Seconds:D2}";
+            StateHasChanged();
+            await Task.Delay(1000);
+        }
+    }
+}
+
+<style>
+    .net-brand-page {
+        background-color: #F3F2F1; /* Light background color */
+        padding: 20px;
+        border-radius: 10px;
+    }
+
+    .net-brand-title {
+        background-color: #512BD4; /* .NET purple color */
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+    }
+
+    .table {
+        background-color: white;
+        border: 1px solid #ddd;
+    }
+
+    .thead-dark th {
+        background-color: #343a40;
+        color: white;
+    }
+
+    .btn-primary {
+        background-color: #512BD4; /* .NET purple color */
+        border-color: #512BD4;
+    }
+</style>
+
+
+
+
+
